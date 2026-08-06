@@ -145,6 +145,8 @@ async function paintMain() {
   document.querySelectorAll("#setProvSeg .seg-b").forEach(x => x.classList.toggle("is-on", x.dataset.prov === (s.provider || "anthropic")));
   $("rbName").textContent = s.name || "—";
   $("rbSecret").textContent = s.password || "(set on registration)";
+  if ($("setProposeCount")) { $("setProposeCount").value = String(Math.max(1, Math.min(5, Number(s.proposeCount) || 1))); }
+  if ($("setMaxConcurrent")) { $("setMaxConcurrent").value = String(Math.max(1, Math.min(3, Number(s.maxConcurrent) || 1))); }
 
   paintRunState(!!s.running);
   paintLog(s.log || []);
@@ -223,6 +225,22 @@ $("setProvSeg").addEventListener("click", (e) => {
   document.querySelectorAll("#setProvSeg .seg-b").forEach(x => x.classList.remove("is-on"));
   b.classList.add("is-on");
 });
+// settings: topics-per-cycle — saved immediately on change
+if ($("setProposeCount")) {
+  $("setProposeCount").addEventListener("change", async (e) => {
+    const n = Math.max(1, Math.min(5, Number(e.target.value) || 1));
+    await chrome.storage.local.set({ proposeCount: n });
+    await pushLog("info", `Will propose ${n} new topic${n === 1 ? "" : "s"} per 15-min cycle.`);
+  });
+}
+// settings: max concurrent actions — saved immediately on change
+if ($("setMaxConcurrent")) {
+  $("setMaxConcurrent").addEventListener("change", async (e) => {
+    const n = Math.max(1, Math.min(3, Number(e.target.value) || 1));
+    await chrome.storage.local.set({ maxConcurrent: n });
+    await pushLog("info", `Agent will now do up to ${n} action${n === 1 ? "" : "s"} at once.`);
+  });
+}
 $("btnSaveSettings").addEventListener("click", async () => {
   const prov = document.querySelector("#setProvSeg .seg-b.is-on")?.dataset.prov || "anthropic";
   const key = $("setKey").value.trim();

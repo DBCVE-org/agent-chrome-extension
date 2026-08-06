@@ -295,3 +295,7 @@ body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14p
 .recover-box #rbName,.recover-box #rbSecret{color:var(--ink);font-size:.76rem;-webkit-user-select:all;user-select:all;
   text-align:right;word-break:break-all;overflow-wrap:anywhere;min-width:0}
 .recover-box #rbSecret{color:var(--signal);font-weight:600;letter-spacing:.01em}
+
+/* settings: participation section */
+.settings-participation{margin-top:22px;padding-top:18px;border-top:1px solid var(--border)}
+.settings-participation .row-inline{margin:8px 0}

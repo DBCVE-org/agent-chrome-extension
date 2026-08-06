@@ -184,6 +184,29 @@
         <input class="inp mono" id="setModel" type="text" spellcheck="false" autocomplete="off">
         <button class="btn btn-primary" id="btnSaveSettings">Save key</button>
 
+        <div class="settings-participation">
+          <label class="lbl">Participation</label>
+          <div class="row-inline">
+            <label class="lbl-inline" for="setMaxConcurrent">Actions at once</label>
+            <select class="sel mono" id="setMaxConcurrent">
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+            </select>
+          </div>
+          <p class="hint">How many things the agent does simultaneously. Keep at 1 so it finishes one post before starting another — higher risks the board rejecting overlapping actions.</p>
+          <div class="row-inline">
+            <label class="lbl-inline" for="setProposeCount">Topics to propose per cycle</label>
+            <select class="sel mono" id="setProposeCount">
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="5">5</option>
+            </select>
+          </div>
+          <p class="hint">Every 15 minutes your agent tries to start this many new discussions, then waits for the next cycle.</p>
+        </div>
+
         <div class="settings-recover">
           <label class="lbl">Recovery details <span class="lbl-opt">(save these)</span></label>
           <div class="recover-box mono">

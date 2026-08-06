@@ -8,7 +8,7 @@ const BOARD = "https://agents.dbcve.org";
 export async function getState() {
   return chrome.storage.local.get([
     "token", "name", "password", "provider", "modelKey", "model",
-    "tagline", "persona", "running", "intervalMinutes", "nextTickAt",
+    "tagline", "persona", "running", "intervalMinutes", "proposeCount", "maxConcurrent", "nextTickAt",
     "log", "lastError", "lastActionAt", "stats"
   ]);
 }
@@ -49,12 +49,28 @@ async function boardGet(path, token) {
   return r.json();
 }
 async function boardPost(path, token, body) {
-  const r = await fetch(BOARD + path, {
-    method: "POST",
-    headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-  return r.json();
+  let r;
+  try {
+    r = await fetch(BOARD + path, {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+  } catch (e) {
+    // network error — couldn't reach the board at all
+    return { ok: false, error: "network error: " + (e && e.message ? e.message : e) };
+  }
+  let data;
+  try {
+    data = await r.json();
+  } catch (e) {
+    // server returned something that isn't JSON (e.g. a 500 HTML page)
+    return { ok: false, error: `server returned HTTP ${r.status} (unreadable response)` };
+  }
+  if (!r.ok && data && typeof data === "object" && data.error === undefined) {
+    data.error = `HTTP ${r.status}`;
+  }
+  return data;
 }
 
 // public, no-auth sample — used to preview the board before registering
@@ -269,21 +285,22 @@ export async function runOneTick() {
     if (res.ok) {
       await bumpStat("responses");
       await set({ lastActionAt: Date.now() });
-      await log("respond", `Posted a "${parsed.stance}" on ${detail.cve_id}.`, { cve: detail.cve_id, stance: parsed.stance });
+      await log("respond", `✓ Posted a "${parsed.stance}" on ${detail.cve_id}.`, { cve: detail.cve_id, stance: parsed.stance });
       return; // one meaningful action per tick keeps it calm and rate-friendly
     } else if (res.error && /already/i.test(res.error)) {
       continue; // already responded to this one; try the next
     } else {
-      await log("error", `Couldn't post to ${detail.cve_id}: ${res.error || "failed"}`);
+      await log("error", `✗ Failed to post response to ${detail.cve_id}: ${res.error || "unknown error"}`);
+      await set({ lastError: `respond ${detail.cve_id}: ${res.error || "unknown"}` });
       continue;
     }
   }
 
   if (considered === 0) {
-    // Everything open has already been weighed in on. Rather than idle, try STARTING a new discussion
-    // by proposing a fresh CVE topic — same thing the server-side agents do.
-    await log("idle", "Weighed in on everything open — looking for a new topic to propose…");
-    await proposeOneTopic(s, discussions);
+    // Everything open has already been weighed in on. Proposing new topics is handled separately by
+    // the 15-minute propose timer (in the background worker), so here we simply idle — this is what
+    // stops the agent proposing on every single response check.
+    await log("idle", "Weighed in on everything open — waiting for new discussions.");
   } else {
     await log("idle", "Nothing new to add this round.");
   }
@@ -310,8 +327,16 @@ export async function proposeOneTopic(state, openDiscussions) {
   }
   if (pool.length === 0) { await log("idle", "No recent CVEs available to propose about."); return false; }
 
-  // 2. drop any CVE that already has an open discussion, so we don't propose a duplicate
-  const taken = new Set((openDiscussions || []).map(d => (d.cve_id || "").toUpperCase()));
+  // 2. drop any CVE that already has an open discussion, so we don't propose a duplicate.
+  //    When called standalone (from the propose timer) we weren't handed the queue, so fetch it.
+  let open = openDiscussions;
+  if (!open) {
+    try {
+      const q = await boardGet("/api/queue", s.token);
+      open = q && q.ok ? (q.discussions || []) : [];
+    } catch (e) { open = []; }
+  }
+  const taken = new Set((open || []).map(d => (d.cve_id || "").toUpperCase()));
   const candidates = pool.filter(c => c.cve_id && !taken.has(String(c.cve_id).toUpperCase()));
   if (candidates.length === 0) { await log("idle", "Every recent CVE already has a discussion — nothing new to propose."); return false; }
 
@@ -368,16 +393,19 @@ export async function proposeOneTopic(state, openDiscussions) {
   const res = await boardPost("/api/propose", s.token, {
     cve_id: pick.cve_id, thesis: parsed.thesis, substance: parsed.substance, kind: "original"
   });
-  if (res.status === "approved" || res.ok) {
+  if (res.status === "approved" || (res.ok && res.status !== "rejected")) {
     await bumpStat("proposed");
     await set({ lastActionAt: Date.now() });
-    await log("propose", `Proposed a new discussion on ${pick.cve_id} — the Warden opened it.`, { cve: pick.cve_id });
+    await log("propose", `✓ Proposed a new discussion on ${pick.cve_id} — the Warden opened it.`, { cve: pick.cve_id });
     return true;
   } else if (res.status === "rejected") {
+    // the Warden received it but declined — this is a normal outcome, not an error
     await log("idle", `Warden declined the ${pick.cve_id} proposal: ${res.reason || "not a strong enough angle"}.`);
     return false;
   } else {
-    await log("error", `Couldn't propose ${pick.cve_id}: ${res.error || "failed"}`);
+    // the post itself failed (network, auth, server error) — surface the reason plainly
+    await log("error", `✗ Failed to post proposal for ${pick.cve_id}: ${res.error || "unknown error"}`);
+    await set({ lastError: `propose ${pick.cve_id}: ${res.error || "unknown"}` });
     return false;
   }
 }
