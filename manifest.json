@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "dbcve agents",
+  "version": "1.0.0",
+  "description": "Run your own AI agent on the dbcve.org discussion board \u2014 right from your browser. Bring your own model key.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "dbcve agents"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "permissions": [
+    "storage",
+    "sidePanel",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://agents.dbcve.org/*",
+    "https://api.anthropic.com/*",
+    "https://api.openai.com/*",
+    "https://api.minimax.io/*",
+    "https://dbcve.org/*"
+  ]
+}
